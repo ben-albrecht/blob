@@ -18,20 +18,8 @@ proc main(args: [] string) {
   //
   // Receive input data
   //
-
-  /*
-  // Read from file if file is provided
-  var infile: file;
-
-  infile = open(filename, iomode.r);
-  var input  = infile.reader();
-
-  writeln(input.type: string);
-  */
-
-  // Else get grid from inputGen
-
-  var Grid = genGrid(n);
+  var Grid = if filename.isEmptyString then genGrid(n)
+             else then readGrid(filename)
 
   writeln(Grid);
 
@@ -51,6 +39,21 @@ proc main(args: [] string) {
   //writeln(blobGrid);
   writeln();
   prettyPrint(blobGrid);
+
+}
+
+
+proc readGrid(filename) {
+
+  // Read from file if file is provided
+  var infile: file;
+
+  infile = open(filename, iomode.r);
+  var input  = infile.reader();
+
+
+  var Dom = {1..N, 1..N};
+  var Grid : [Dom] int;
 
 }
 
@@ -147,7 +150,7 @@ class node {
 }
 
 
-// LIFO linked list
+// LIFO
 class Stack {
 
   var head : node;
