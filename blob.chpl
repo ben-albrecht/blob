@@ -18,10 +18,8 @@ proc main(args: [] string) {
   //
   // Receive input data
   //
-  var Grid = if filename.isEmptyString then genGrid(n)
-             else then readGrid(filename)
-
-  writeln(Grid);
+  var Grid = if filename.isEmptyString() then genGrid(n)
+             else readGrid(filename);
 
   //
   // Generate general image of pixels from input data
@@ -35,8 +33,6 @@ proc main(args: [] string) {
 
   var blobGrid = blobExtraction(image);
 
-  //writeln();
-  //writeln(blobGrid);
   writeln();
   prettyPrint(blobGrid);
 
@@ -51,10 +47,17 @@ proc readGrid(filename) {
   infile = open(filename, iomode.r);
   var input  = infile.reader();
 
+  // It's stupid... but it works
+  var N = 0;
+  for line in infile.lines() {
+    N += 1;
+  }
 
   var Dom = {1..N, 1..N};
   var Grid : [Dom] int;
+  input.read(Grid);
 
+  return Grid;
 }
 
 
