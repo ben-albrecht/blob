@@ -1,8 +1,13 @@
 use Help;
+use BlockDist;
+
 use inputGen;
 
 config const filename: string;
 config const n: int = 10;
+
+// Less obnoxious variable name
+param comm = CHPL_COMM;
 
 proc main(args: [] string) {
   const program = args[0];
@@ -18,8 +23,11 @@ proc main(args: [] string) {
   //
   // Receive input data
   //
-  var Grid = if filename.isEmptyString then genGrid(n)
+  var globalGrid = if filename.isEmptyString then genGrid(n)
              else then readGrid(filename)
+
+  var Grid = if comm == 'none' then globalGrid 
+             else distributeArray(globalGrid);
 
   writeln(Grid);
 
@@ -42,6 +50,50 @@ proc main(args: [] string) {
 
 }
 
+/* Create and return a distributed array */
+proc distributeArray(globalArray) {
+
+  // Reshape default array, Locales, into '1 x numLocales' 2D localeArray
+  var localeDom = {1..numLocales, 1..1};
+  var localeArray : [localeDom] locale = reshape(Locales, localeDom);
+
+  const Dom = globalArray.domain dmapped Block(globalArray.domain, targetLocales=localeArray);
+  var Array : [Dom] int;
+
+  addFluff(Array);
+
+  assignArray(Array, globalArray);
+
+  return Array;
+}
+
+/* Add row of fluff in 1 direction that overlaps with next locales domain */
+proc addFluff(ref Array) {
+
+  // Exclude last locale
+  for loc in Locales[0.. # Locales.size - 1] {
+    on loc {
+      // Domain of this locale
+      var thisDomain = Array._value.myLocArr.locDom.myBlock;
+      // Expand row in 1 direction, overlapping with next locale
+      var thisDomainExpanded = {thisDomain.first(1)..thisDomain.last(1)+1, thisDomain.first(2)..thisDomain.last(2)};
+      // Update locale's copy of domain
+      Array._value.myLocArr.locDom.myBlock = localDomExpanded;
+    }
+  }
+}
+
+/* Copy Array values */
+proc assignArray(ref Array, globalArray) {
+  // I don't think this is necessary.. but we'll find out
+  forall loc in Locales {
+    on loc {
+      for (i, j) in Array.localSubdomain() {
+        Array[i, j] = globalArray[i, j];
+      }
+    }
+  }
+}
 
 proc readGrid(filename) {
 
