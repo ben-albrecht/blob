@@ -23,7 +23,7 @@ proc main(args: [] string) {
   //
   // Receive input data
   //
-  var globalGrid = if filename.isEmptyString then genGrid(n)
+  var globalGrid = if filename.isEmptyString() then genGrid(n)
              else then readGrid(filename)
 
   var Grid = if comm == 'none' then globalGrid 
@@ -43,11 +43,8 @@ proc main(args: [] string) {
 
   var blobGrid = blobExtraction(image);
 
-  //writeln();
-  //writeln(blobGrid);
   writeln();
   prettyPrint(blobGrid);
-
 }
 
 /* Create and return a distributed array */
@@ -103,10 +100,21 @@ proc readGrid(filename) {
   infile = open(filename, iomode.r);
   var input  = infile.reader();
 
-
+  var N = numLines(infile);
   var Dom = {1..N, 1..N};
   var Grid : [Dom] int;
 
+  input.read(Grid);
+  input.close();
+
+  return Grid;
+}
+
+
+proc numLines(filehandle) {
+  var n = 0;
+  for line in filehandle.lines() do n += 1;
+  return n;
 }
 
 
@@ -141,7 +149,7 @@ proc blobExtraction(image) {
             }
           }
         }
-      } while ! stack.isEmpty();
+      } while !stack.isEmpty();
     }
   }
 
@@ -221,5 +229,4 @@ class Stack {
   proc isEmpty() {
     return head == nil;
   }
-
 }

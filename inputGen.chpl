@@ -35,7 +35,7 @@ proc main(args: [] string) {
 proc genGrid(N) {
 
   // Create a random binary 2D array
-  var random = new PCGRandomStream(eltType=int);
+  var random = new RandomStream(eltType=int);
   var Dom = {1..N, 1..N};
   var Grid : [Dom] int;
 
