@@ -1,11 +1,11 @@
 all: blob
 
-blob: blob.chpl inputGen
-	chpl blob.chpl -o blob
+OBJECTS = blob inputGen distributed
+REALS = blob_real inputGen_real distributed_real
 
-inputGen: inputGen.chpl
-	chpl inputGen.chpl -o inputGen
+%: %.chpl
+	chpl $< -o $@
 
 clean:
-	rm -f inputGen blob
-
+	rm -f ${OBJECTS}
+	rm -f ${REALS}

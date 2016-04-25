@@ -1,7 +1,6 @@
 use Help;
-use BlockDist;
-
-use inputGen;
+use Distributed;
+use InputGen;
 
 config const filename: string;
 config const n: int = 10;
@@ -23,11 +22,8 @@ proc main(args: [] string) {
   //
   // Receive input data
   //
-  var globalGrid = if filename.isEmptyString() then genGrid(n)
-             else then readGrid(filename)
-
-  var Grid = if comm == 'none' then globalGrid 
-             else distributeArray(globalGrid);
+  var Grid = if filename.isEmptyString() then genGrid(n)
+             else readGrid(filename);
 
   writeln(Grid);
 
@@ -35,63 +31,22 @@ proc main(args: [] string) {
   // Generate general image of pixels from input data
   //
 
-  var image = genImage(Grid);
+  var globalImage = genImage(Grid);
 
+  var image = if comm == 'none' then globalImage
+              else distributeArray(globalImage);
+
+  printLocality(image);
   //
   // Blob Extraction
   //
 
   var blobGrid = blobExtraction(image);
 
-  writeln();
-  prettyPrint(blobGrid);
+  //prettyPrint(blobGrid);
 }
 
-/* Create and return a distributed array */
-proc distributeArray(globalArray) {
-
-  // Reshape default array, Locales, into '1 x numLocales' 2D localeArray
-  var localeDom = {1..numLocales, 1..1};
-  var localeArray : [localeDom] locale = reshape(Locales, localeDom);
-
-  const Dom = globalArray.domain dmapped Block(globalArray.domain, targetLocales=localeArray);
-  var Array : [Dom] int;
-
-  addFluff(Array);
-
-  assignArray(Array, globalArray);
-
-  return Array;
-}
-
-/* Add row of fluff in 1 direction that overlaps with next locales domain */
-proc addFluff(ref Array) {
-
-  // Exclude last locale
-  for loc in Locales[0.. # Locales.size - 1] {
-    on loc {
-      // Domain of this locale
-      var thisDomain = Array._value.myLocArr.locDom.myBlock;
-      // Expand row in 1 direction, overlapping with next locale
-      var thisDomainExpanded = {thisDomain.first(1)..thisDomain.last(1)+1, thisDomain.first(2)..thisDomain.last(2)};
-      // Update locale's copy of domain
-      Array._value.myLocArr.locDom.myBlock = localDomExpanded;
-    }
-  }
-}
-
-/* Copy Array values */
-proc assignArray(ref Array, globalArray) {
-  // I don't think this is necessary.. but we'll find out
-  forall loc in Locales {
-    on loc {
-      for (i, j) in Array.localSubdomain() {
-        Array[i, j] = globalArray[i, j];
-      }
-    }
-  }
-}
-
+/* Read in grid from file */
 proc readGrid(filename) {
 
   // Read from file if file is provided
@@ -100,7 +55,7 @@ proc readGrid(filename) {
   infile = open(filename, iomode.r);
   var input  = infile.reader();
 
-  var N = numLines(infile);
+  var N = len(infile.lines());
   var Dom = {1..N, 1..N};
   var Grid : [Dom] int;
 
@@ -111,24 +66,39 @@ proc readGrid(filename) {
 }
 
 
-proc numLines(filehandle) {
-  var n = 0;
-  for line in filehandle.lines() do n += 1;
-  return n;
-}
-
-
-proc prettyPrint(blobGrid) {
-  var blobPretty : [blobGrid.domain] string;
-  forall (i, j) in blobGrid.domain {
-    // Represent each number as an ascii char between 32 and 126
-    blobPretty[i, j] = "%c".format((blobGrid[i, j] % 95) + 32);
-  }
-  writeln(blobPretty);
-}
-
-
 proc blobExtraction(image) {
+  var blobGrid : [image.domain] uint(8);
+  var stack = new Stack();
+
+  // Does this do the distribution correctly?
+  forall (i, j) in image.domain with (in currentlabel) {
+    var x, y: int;
+    // Need to generate label IDs based on powers of the Nth prime number,
+    // where N is here.id (or is there a simpler way to do this?)
+    var currentlabel: uint(8);
+    if !blobGrid[i, j] {
+      currentlabel += 1;
+      blobGrid[i, j] = currentlabel;
+      stack.push((i, j));
+      do {
+        (x, y) = stack.pop();
+        for (k,l) in neighbors(x, y) {
+          if !blobGrid[k, l] {
+            if image[x, y].foreground(image[k, l]) {
+              blobGrid[k, l] = currentlabel;
+              stack.push((k, l));
+            }
+          }
+        }
+      } while !stack.isEmpty();
+    }
+  }
+
+  return blobGrid;
+}
+
+
+proc blobExtractionSerial(image) {
   var currentlabel : uint(8) = 0;
   var blobGrid : [image.domain] uint(8);
   var x, y : int;
@@ -155,7 +125,6 @@ proc blobExtraction(image) {
 
   return blobGrid;
 }
-
 
 proc labelBlob(i, j, const image, ref blobGrid, currentlabel, currentpixel) {
   if blobGrid[i, j] == -1 {
@@ -188,6 +157,25 @@ proc genImage(Grid) {
 }
 
 
+/* Count the length of an iterable object */
+proc len(iterable) {
+  var count = 0;
+  for iteration in iterable do count += 1;
+  return count;
+}
+
+
+proc prettyPrint(blobGrid) {
+  var blobPretty : [blobGrid.domain] string;
+  writeln();
+  forall (i, j) in blobGrid.domain {
+    // Represent each number as an ascii char between 32 and 126
+    blobPretty[i, j] = "%c".format((blobGrid[i, j] % 95) + 32);
+  }
+  writeln(blobPretty);
+}
+
+
 proc printHelp(program) {
   writeln(program, " performs connected component analysis on an input file");
 }
@@ -197,7 +185,7 @@ proc printHelp(program) {
 record pixel {
   var value : int = -1;
 
-  // Function to determine if another pixel is in the foreground
+  // Function to determine if another pixel is in the 'foreground'
   proc foreground(p : pixel): bool {
     return p.value == value;
   }

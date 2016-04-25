@@ -1,6 +1,7 @@
 /* Generate random image with 0s and 1s for blob detection analysis */
 use Help;
 use Random;
+use InputGen;
 
 config const outputfname: string = "";
 config const order: int = 10;
@@ -32,20 +33,22 @@ proc main(args: [] string) {
 
 }
 
-proc genGrid(N) {
+module InputGen {
+  proc genGrid(N) {
 
-  // Create a random binary 2D array
-  var random = new RandomStream(eltType=int);
-  var Dom = {1..N, 1..N};
-  var Grid : [Dom] int;
+    // Create a random binary 2D array
+    var random = new RandomStream(eltType=int);
+    var Dom = {1..N, 1..N};
+    var Grid : [Dom] int;
 
-  forall (i, j) in Dom {
-    Grid[i, j] = random.getNext(0,1);
+    forall (i, j) in Dom {
+      Grid[i, j] = random.getNext(0,1);
+    }
+
+    return Grid;
   }
 
-  return Grid;
-}
-
-proc printHelp(program) {
-  writeln(program, " generates a 2D grid of numbers for input for blob detection");
+  proc printHelp(program) {
+    writeln(program, " generates a 2D grid of numbers for input for blob detection");
+  }
 }
