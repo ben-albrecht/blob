@@ -1,6 +1,6 @@
-use BlockDist;
-
 module Distributed {
+  use BlockDist;
+
 
   /* Create and return a distributed array */
   proc distributeArray(globalArray) {

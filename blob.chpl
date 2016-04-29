@@ -36,12 +36,14 @@ proc main(args: [] string) {
   var image = if comm == 'none' then globalImage
               else distributeArray(globalImage);
 
-  printLocality(image);
+  if comm != 'none' then
+    printLocality(image);
   //
   // Blob Extraction
   //
 
-  var blobGrid = blobExtraction(image);
+  var blobGrid = if comm == 'none' then blobExtractionSerial(image)
+                 else blobExtraction(image);
 
   //prettyPrint(blobGrid);
 }
@@ -68,31 +70,36 @@ proc readGrid(filename) {
 
 proc blobExtraction(image) {
   var blobGrid : [image.domain] uint(8);
+
+  var L = {0..numLocales};
+  var localeDom = L dmapped Block(L);
+  var maxLabels: [localeDom] int = 0;
+
+  var currentLabel: uint(8);
   var stack = new Stack();
 
-  // Does this do the distribution correctly?
-  forall (i, j) in image.domain with (in currentlabel) {
+  forall (i, j) in image.domain with (in currentLabel, in stack) {
     var x, y: int;
-    // Need to generate label IDs based on powers of the Nth prime number,
-    // where N is here.id (or is there a simpler way to do this?)
-    var currentlabel: uint(8);
     if !blobGrid[i, j] {
-      currentlabel += 1;
-      blobGrid[i, j] = currentlabel;
+      currentLabel += 1;
+      blobGrid[i, j] = currentLabel;
       stack.push((i, j));
       do {
         (x, y) = stack.pop();
         for (k,l) in neighbors(x, y) {
           if !blobGrid[k, l] {
             if image[x, y].foreground(image[k, l]) {
-              blobGrid[k, l] = currentlabel;
+              blobGrid[k, l] = currentLabel;
               stack.push((k, l));
             }
           }
         }
       } while !stack.isEmpty();
     }
+    maxLabels[here.id] = currentLabel;
   }
+
+  //mapOverlaps(image);
 
   return blobGrid;
 }
@@ -176,13 +183,15 @@ proc prettyPrint(blobGrid) {
 }
 
 
+/* Help function */
 proc printHelp(program) {
   writeln(program, " performs connected component analysis on an input file");
 }
 
 
-// We use integer value as simple example (rather than rgb)
+/* Record for holding pixel data, or any other data that fills the grid */
 record pixel {
+  // Using a dummy value instead of rgb for now
   var value : int = -1;
 
   // Function to determine if another pixel is in the 'foreground'
@@ -192,24 +201,29 @@ record pixel {
 }
 
 
-class node {
+/* Node containing data and next node for Stack class */
+class Node {
   var data: 2*(int);
-  var next: node;
+  var next: Node;
 }
 
 
-// LIFO
+/* Really simple stack data structure */
 class Stack {
 
-  var head : node;
+  var head : Node;
 
   proc push(data) {
-    var n = new node(data, head);
+    var n = new Node(data, head);
     head = n;
   }
 
   proc pop() {
     var popped = head;
+    if this.isEmpty() {
+      writeln('popped:');
+      writeln(popped);
+    }
     head = popped.next;
     return popped.data;
   }
