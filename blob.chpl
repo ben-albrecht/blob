@@ -69,39 +69,60 @@ proc readGrid(filename) {
 
 
 proc blobExtraction(image) {
-  var blobGrid : [image.domain] uint(8);
+  var globalBlob: [image.domain] uint(8);
+  var blobGrid = distributeArray(globalBlob);
 
   var L = {0..numLocales};
   var localeDom = L dmapped Block(L);
-  var maxLabels: [localeDom] int = 0;
+  var maxLabels: [localeDom] uint(8) = 0;
 
-  var currentLabel: uint(8);
-  var stack = new Stack();
-
-  forall (i, j) in image.domain with (in currentLabel, in stack) {
-    var x, y: int;
-    if !blobGrid[i, j] {
-      currentLabel += 1;
-      blobGrid[i, j] = currentLabel;
-      stack.push((i, j));
-      do {
-        (x, y) = stack.pop();
-        for (k,l) in neighbors(x, y) {
-          if !blobGrid[k, l] {
-            if image[x, y].foreground(image[k, l]) {
-              blobGrid[k, l] = currentLabel;
-              stack.push((k, l));
+  coforall loc in Locales {
+    on loc {
+      var currentLabel: uint(8);
+      var stack = new Stack();
+      //var localImage => image._value.locArr[here.id].myElems;
+      var localImage => image._value.myLocArr.locDom.myBlock;
+      for (i, j) in localImage {
+        var x, y: int;
+        if !blobGrid[i, j] {
+          currentLabel += 1;
+          blobGrid[i, j] = currentLabel;
+          stack.push((i, j));
+          do {
+            (x, y) = stack.pop();
+            for (k,l) in neighbors(x, y) {
+              if !blobGrid[k, l] {
+                if image[x, y].foreground(image[k, l]) {
+                  blobGrid[k, l] = currentLabel;
+                  stack.push((k, l));
+                }
+              }
             }
-          }
+          } while !stack.isEmpty();
         }
-      } while !stack.isEmpty();
+        maxLabels[here.id] = currentLabel;
+      }
     }
-    maxLabels[here.id] = currentLabel;
   }
+
+  // Increment locales by maxLabels[]
+  syncLabels(blobGrid, maxLabels);
 
   //mapOverlaps(image);
 
   return blobGrid;
+}
+
+
+proc syncLabels(ref blobGrid, maxLabels) {
+  coforall loc in Locales[1..Locales.size - 1] {
+    on loc {
+      var localBlob => blobGrid._value.myLocArr.locDom.myBlock;
+      forall (i, j) in localBlob {
+        blobGrid[i, j] += maxLabels[here.id-1];
+      }
+    }
+  }
 }
 
 
@@ -220,10 +241,6 @@ class Stack {
 
   proc pop() {
     var popped = head;
-    if this.isEmpty() {
-      writeln('popped:');
-      writeln(popped);
-    }
     head = popped.next;
     return popped.data;
   }
